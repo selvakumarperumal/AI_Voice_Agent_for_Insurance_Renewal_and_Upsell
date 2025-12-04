@@ -1,22 +1,13 @@
-"""
-Database connection and session management for LiveKit Voice Agent.
-
-Provides async database access to query customer and policy information
-during voice calls.
-"""
+"""Database connection for LiveKit Voice Agent."""
 import logging
-from typing import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlmodel import SQLModel
-
 from config import settings
 
 logger = logging.getLogger(__name__)
 
-
-# Create async database engine
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
@@ -25,7 +16,6 @@ engine = create_async_engine(
     max_overflow=10,
 )
 
-# Session factory for creating database sessions
 async_session_maker = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -37,13 +27,7 @@ async_session_maker = async_sessionmaker(
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Async context manager for database sessions.
-    
-    Usage:
-        async with get_session() as session:
-            result = await session.execute(query)
-    """
+    """Async context manager for database sessions."""
     async with async_session_maker() as session:
         try:
             yield session
@@ -56,12 +40,11 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database connection (verify connectivity)."""
+    """Verify database connectivity."""
     try:
         async with engine.begin() as conn:
-            # Just verify we can connect
-            await conn.run_sync(lambda conn: conn.execute)
-        logger.info("Database connection verified")
+            await conn.run_sync(lambda c: c.execute)
+        logger.info("Database connected")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
         raise
