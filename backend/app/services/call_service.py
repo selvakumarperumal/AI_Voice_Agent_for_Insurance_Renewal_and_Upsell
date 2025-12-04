@@ -1,4 +1,4 @@
-"""Call Service - Database operations and call orchestration."""
+"""Call Service - Optimized database operations."""
 import logging
 from datetime import datetime
 from typing import Optional, List
@@ -8,63 +8,58 @@ from sqlmodel import select
 
 from ..models import Call
 from . import customer_service, policy_service
-from .caller import make_call as livekit_make_call, get_active_rooms as livekit_get_rooms
+from .caller import make_call as livekit_call, get_active_rooms
 
 logger = logging.getLogger(__name__)
 
+SIP_OUTCOMES = {
+    "busy": ["busy", "486"],
+    "no_answer": ["no answer", "408", "timeout"],
+    "rejected": ["decline", "rejected", "603"],
+    "unavailable": ["unavailable", "480"],
+    "config_error": ["trial account", "verified caller"],
+}
 
-def _parse_sip_outcome(error: str) -> str:
-    """Parse SIP error to outcome (busy, no_answer, rejected, failed)."""
+
+def _parse_outcome(error: str) -> str:
     e = error.lower()
-    if "busy" in e or "486" in error:
-        return "busy"
-    elif "no answer" in e or "408" in error or "timeout" in e:
-        return "no_answer"
-    elif "decline" in e or "rejected" in e or "603" in error:
-        return "rejected"
-    elif "unavailable" in e or "480" in error:
-        return "unavailable"
-    elif "trial account" in e or "verified caller" in e:
-        return "config_error"
+    for outcome, patterns in SIP_OUTCOMES.items():
+        if any(p in e for p in patterns):
+            return outcome
     return "failed"
 
 
 async def initiate_call(session: AsyncSession, customer_id: str) -> Call:
-    """Initiate a call to a customer via LiveKit SIP."""
+    """Initiate call - fires immediately, doesn't wait."""
     customer = await customer_service.get_customer(session, customer_id)
     if not customer:
         raise ValueError("Customer not found")
 
-    result = await livekit_make_call(customer.phone, customer.name)
-
-    if not result["success"]:
-        error = result.get("error", "Call failed")
-        call = Call(
-            customer_id=customer_id, customer_phone=customer.phone,
-            customer_name=customer.name, room_name="",
-            status="failed", outcome=_parse_sip_outcome(error), notes=error
-        )
-        session.add(call)
-        await session.commit()
-        await session.refresh(call)
-        raise ValueError(error)
-
+    result = await livekit_call(customer.phone, customer.name)
+    
     call = Call(
-        customer_id=customer_id, customer_phone=customer.phone,
-        customer_name=customer.name, room_name=result["room_name"], status="initiated"
+        customer_id=customer_id,
+        customer_phone=customer.phone,
+        customer_name=customer.name,
+        room_name=result.get("room_name", ""),
+        status="initiated" if result["success"] else "failed",
+        outcome=None if result["success"] else _parse_outcome(result.get("error", "")),
+        notes=None if result["success"] else result.get("error")
     )
     session.add(call)
     await session.commit()
     await session.refresh(call)
-    logger.info(f"Call initiated: {customer.name} - Room: {call.room_name}")
+    
+    if not result["success"]:
+        raise ValueError(result.get("error", "Call failed"))
     return call
 
 
-async def call_customers_with_expiring_policies(session: AsyncSession, days: int = 30, limit: int = 10) -> dict:
+async def batch_call_expiring(session: AsyncSession, days: int = 30, limit: int = 10) -> dict:
     """Batch call customers with expiring policies."""
     policies = await policy_service.get_expiring_policies(session, days=days)
     if not policies:
-        return {"total_found": 0, "calls_made": 0, "results": []}
+        return {"total": 0, "initiated": 0, "results": []}
 
     customer_ids = list(set(p.customer_id for p in policies))[:limit]
     results, success = [], 0
@@ -74,58 +69,44 @@ async def call_customers_with_expiring_policies(session: AsyncSession, days: int
         if not customer:
             continue
 
-        result = await livekit_make_call(customer.phone, customer.name)
+        result = await livekit_call(customer.phone, customer.name)
+        call = Call(
+            customer_id=cid, customer_phone=customer.phone, customer_name=customer.name,
+            room_name=result.get("room_name", ""),
+            status="initiated" if result["success"] else "failed",
+            notes=result.get("error") if not result["success"] else None
+        )
+        session.add(call)
+        
         if result["success"]:
-            call = Call(customer_id=cid, customer_phone=customer.phone,
-                       customer_name=customer.name, room_name=result["room_name"], status="initiated")
-            session.add(call)
             success += 1
             results.append({"customer_id": cid, "status": "initiated", "room": result["room_name"]})
         else:
-            call = Call(customer_id=cid, customer_phone=customer.phone,
-                       customer_name=customer.name, room_name="", status="failed", notes=result.get("error"))
-            session.add(call)
             results.append({"customer_id": cid, "status": "failed", "error": result.get("error")})
 
     await session.commit()
-    return {"total_found": len(customer_ids), "calls_made": success, "results": results}
+    return {"total": len(customer_ids), "initiated": success, "results": results}
 
 
 async def get_call(session: AsyncSession, call_id: str) -> Optional[Call]:
-    """Get call by ID."""
-    result = await session.execute(select(Call).where(Call.id == call_id))
-    return result.scalar_one_or_none()
+    return (await session.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
 
 
-async def get_call_by_room(session: AsyncSession, room_name: str) -> Optional[Call]:
-    """Get call by room name."""
-    result = await session.execute(select(Call).where(Call.room_name == room_name))
-    return result.scalar_one_or_none()
+async def get_call_by_room(session: AsyncSession, room: str) -> Optional[Call]:
+    return (await session.execute(select(Call).where(Call.room_name == room))).scalar_one_or_none()
 
 
-async def get_customer_calls(session: AsyncSession, customer_id: str) -> List[Call]:
-    """Get all calls for a customer."""
-    result = await session.execute(
-        select(Call).where(Call.customer_id == customer_id).order_by(Call.started_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-async def list_calls(session: AsyncSession, customer_id: Optional[str] = None,
-                     status: Optional[str] = None, limit: int = 50) -> List[Call]:
-    """List calls with optional filters."""
+async def list_calls(session: AsyncSession, customer_id: str = None, status: str = None, limit: int = 50) -> List[Call]:
     stmt = select(Call)
     if customer_id:
         stmt = stmt.where(Call.customer_id == customer_id)
     if status:
         stmt = stmt.where(Call.status == status)
-    result = await session.execute(stmt.order_by(Call.started_at.desc()).limit(limit))
-    return list(result.scalars().all())
+    return list((await session.execute(stmt.order_by(Call.started_at.desc()).limit(limit))).scalars().all())
 
 
-async def update_call_status(session: AsyncSession, call_id: str, status: str,
-                             outcome: Optional[str] = None, notes: Optional[str] = None) -> Optional[Call]:
-    """Update call status."""
+async def update_status(session: AsyncSession, call_id: str, status: str, 
+                        outcome: str = None, notes: str = None) -> Optional[Call]:
     call = await get_call(session, call_id)
     if not call:
         return None
@@ -142,9 +123,8 @@ async def update_call_status(session: AsyncSession, call_id: str, status: str,
     return call
 
 
-async def update_call_summary(session: AsyncSession, call_id: str, outcome: Optional[str] = None,
-                              notes: Optional[str] = None, interested_product_id: Optional[str] = None) -> Optional[Call]:
-    """Update call with summary after completion."""
+async def update_summary(session: AsyncSession, call_id: str, outcome: str = None,
+                         notes: str = None, product_id: str = None) -> Optional[Call]:
     call = await get_call(session, call_id)
     if not call:
         return None
@@ -154,14 +134,13 @@ async def update_call_summary(session: AsyncSession, call_id: str, outcome: Opti
         call.outcome = outcome
     if notes:
         call.notes = notes
-    if interested_product_id:
-        call.interested_product_id = interested_product_id
+    if product_id:
+        call.interested_product_id = product_id
     session.add(call)
     await session.commit()
     await session.refresh(call)
     return call
 
 
-async def get_active_calls() -> List[dict]:
-    """Get active calls from LiveKit."""
-    return await livekit_get_rooms()
+async def get_active() -> List[dict]:
+    return await get_active_rooms()
