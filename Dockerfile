@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+WORKDIR /code
+
+# Copy uv binary from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Copy dependency files
+COPY pyproject.toml pyproject.toml
+COPY uv.lock uv.lock
+
+# Sync dependencies (without installing the project itself)
+RUN uv sync --frozen --no-install-project
+
+# Copy application code
+COPY ./backend /code/backend
+
+# Sync dependencies (including the project)
+RUN uv sync --frozen
+

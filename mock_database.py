@@ -70,8 +70,8 @@ MOCK_DATABASE = {
     
     # Customer Active Policies - What customers currently have
     "policies": {
-        "POL001": {
-            "policy_id": "POL001",
+        "POL-001": {
+            "policy_id": "POL-001",
             "customer_id": "CUST001",
             "product_id": "PROD001",  # Links to product catalog
             "policy_number": "HLT/2024/001234",
@@ -81,8 +81,8 @@ MOCK_DATABASE = {
             "end_date": "2025-12-14",
             "claim_history": []
         },
-        "POL002": {
-            "policy_id": "POL002",
+        "POL-002": {
+            "policy_id": "POL-002",
             "customer_id": "CUST001",
             "product_id": "PROD003",
             "policy_number": "LIFE/2023/005678",
@@ -125,7 +125,7 @@ MOCK_DATABASE = {
             "phone": "+919123561817",
             "age": 27,
             "city": "Salem",
-            "active_policies": ["POL001", "POL002"]
+            "active_policies": ["POL-001", "POL-002"]
         },
         "CUST002": {
             "customer_id": "CUST002",

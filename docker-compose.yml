@@ -1,0 +1,58 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: insurance_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: insurance_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: insurance_app
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/insurance_db
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    command: ["uv", "run", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/code/backend
+    working_dir: /code
+
+  livekit:
+    build:
+      context: .
+      dockerfile: Dockerfile.livekit
+    container_name: livekit
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/insurance_db
+    env_file:
+      - .env
+    working_dir: /code
+    volumes:
+      - ./livekit:/code/livekit
+    command: ["uv", "run", "livekit/main.py", "dev"]
+
+volumes:
+  postgres_data:
