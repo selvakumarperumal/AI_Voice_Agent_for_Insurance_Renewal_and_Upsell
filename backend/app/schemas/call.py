@@ -11,6 +11,11 @@ class CallSummary(SQLModel):
     outcome: Optional[str] = None
     notes: Optional[str] = None
     interested_product_id: Optional[str] = None
+    # Renewal & Upgrade
+    customer_policy_id: Optional[str] = None  # Policy discussed
+    renewal_agreed: Optional[bool] = None     # Customer agreed to renew
+    upgrade_agreed: Optional[bool] = None     # Customer agreed to upgrade
+    upgrade_to_policy_id: Optional[str] = None  # Policy to upgrade to
 
 
 class CallResponse(SQLModel):
@@ -29,3 +34,8 @@ class CallResponse(SQLModel):
     summary: Optional[str]  # AI-generated summary
     transcript: Optional[str]  # Full conversation transcript
     interested_product_id: Optional[str]
+    # Renewal & Upgrade
+    customer_policy_id: Optional[str]
+    renewal_agreed: bool = False
+    upgrade_agreed: bool = False
+    upgrade_to_policy_id: Optional[str]

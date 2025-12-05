@@ -47,3 +47,15 @@ class Call(SQLModel, table=True):
     
     # If customer was interested in a specific product
     interested_product_id: Optional[str] = Field(default=None, foreign_key="products.id")
+    
+    # ===== RENEWAL & UPGRADE TRACKING =====
+    # Policy that was discussed during the call
+    customer_policy_id: Optional[str] = Field(default=None, foreign_key="customer_policies.id")
+    
+    # Customer agreement status
+    renewal_agreed: bool = Field(default=False)  # Customer agreed to renew
+    upgrade_agreed: bool = Field(default=False)  # Customer agreed to upgrade
+    
+    # If upgrade, which policy they're upgrading to
+    upgrade_to_policy_id: Optional[str] = Field(default=None, foreign_key="policies.id")
+

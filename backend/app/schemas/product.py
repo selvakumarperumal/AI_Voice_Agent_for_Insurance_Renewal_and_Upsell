@@ -16,6 +16,8 @@ class ProductCreate(SQLModel):
     features: List[str] = []
     eligibility: dict = {}
     description: Optional[str] = None
+    min_age: Optional[int] = 18
+    max_age: Optional[int] = 65
 
 
 class ProductUpdate(SQLModel):
@@ -26,6 +28,8 @@ class ProductUpdate(SQLModel):
     features: Optional[List[str]] = None
     eligibility: Optional[dict] = None
     description: Optional[str] = None
+    min_age: Optional[int] = None
+    max_age: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -40,5 +44,8 @@ class ProductResponse(SQLModel):
     features: List[str]
     eligibility: dict
     description: Optional[str]
+    min_age: Optional[int]
+    max_age: Optional[int]
     is_active: bool
     created_at: datetime
+

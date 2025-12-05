@@ -94,15 +94,20 @@ async def entrypoint(ctx: JobContext):
                       "callback" if s['callback_scheduled'] else
                       "not_interested" if s['interested_in_renewal'] is False else "completed")
             
+            # Note: selected_products contains product codes not UUIDs, so skip interested_product_id
             await update_call_status(
                 room_name=room_name, status="completed", outcome=outcome,
-                notes=f"Duration: {s['call_duration']}s",
-                summary=state.generate_summary(), transcript=state.get_transcript(),
-                interested_product_id=s['selected_products'][0] if s['selected_products'] else None
+                notes=f"Duration: {s['call_duration']}s | Products: {', '.join(s['selected_products']) if s['selected_products'] else 'None'}",
+                summary=state.generate_summary(), transcript=state.get_transcript()
             )
             logger.info(f"Completed: {outcome}, {s['call_duration']}s")
         except Exception as e:
             logger.error(f"Save error: {e}")
+            # Still try to update just the status
+            try:
+                await update_call_status(room_name=room_name, status="completed", outcome="error")
+            except:
+                pass
         finally:
             cleanup_state(room_name)
 

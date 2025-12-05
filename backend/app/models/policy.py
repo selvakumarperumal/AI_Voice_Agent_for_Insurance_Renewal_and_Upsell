@@ -1,22 +1,24 @@
 """
-Policy Model - Customer's Active Policies
+Policy Model - Insurance Policy Templates
 """
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, Date
+from sqlalchemy import Column, DateTime
 from uuid import uuid4
 
 
 class Policy(SQLModel, table=True):
     """
-    Customer's active insurance policies.
+    Insurance policy template.
     
-    A policy is a specific instance of a product purchased by a customer.
-    It has customized terms like:
-        - Specific sum assured (from product options)
-        - Premium (may vary based on customer profile)
-        - Start and end dates
+    A policy is a configured offering based on a product.
+    Multiple customers can subscribe to the same policy via CustomerPolicy.
+    
+    Example:
+        - Policy: "Family Health Shield - Basic Plan 2024"
+        - Product: "Family Health Shield"
+        - Customers subscribe via CustomerPolicy table
     """
     __tablename__ = "policies"
     
@@ -24,25 +26,23 @@ class Policy(SQLModel, table=True):
     
     # Policy identification
     policy_number: str = Field(unique=True, index=True)  # e.g., "HLT/2024/001234"
+    policy_name: str = Field(default="")  # e.g., "Family Health Basic 2024"
     
-    # Relationships
-    customer_id: str = Field(foreign_key="customers.id", index=True)
+    # Product reference
     product_id: str = Field(foreign_key="products.id", index=True)
     
-    # Policy terms
-    premium_amount: int = Field(nullable=False)  # Annual premium in INR
-    sum_assured: int = Field(nullable=False)  # Coverage amount in INR
+    # Default terms (can be customized per customer in CustomerPolicy)
+    base_premium: int = Field(nullable=False)  # Default annual premium in INR
+    base_sum_assured: int = Field(nullable=False)  # Default coverage amount in INR
     
-    # Policy period
-    start_date: date = Field(sa_column=Column(Date, nullable=False))
-    end_date: date = Field(sa_column=Column(Date, nullable=False, index=True))
+    # Policy duration (default)
+    duration_months: int = Field(default=12)  # Default policy duration
     
-    # Status
-    status: str = Field(default="active", index=True)  # active, expired, cancelled, renewed
+    # Status: active, inactive
+    is_active: bool = Field(default=True)
     
-    # Renewal tracking
-    renewal_reminder_sent: bool = Field(default=False)
-    renewed_policy_id: Optional[str] = Field(default=None)  # Links to new policy if renewed
+    # Description
+    description: Optional[str] = Field(default=None)
     
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -52,3 +52,4 @@ class Policy(SQLModel, table=True):
         default_factory=datetime.utcnow,
         sa_column=Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     )
+

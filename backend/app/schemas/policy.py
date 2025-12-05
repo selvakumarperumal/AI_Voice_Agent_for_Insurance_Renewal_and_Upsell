@@ -1,60 +1,57 @@
 """
-Policy Schemas - Request/Response models for Policy API
+Policy Schemas - Request/Response models for Policy API (Template model)
 """
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel
 
 
 class PolicyCreate(SQLModel):
-    """Schema for creating a policy."""
+    """Schema for creating a policy template."""
     policy_number: str
-    customer_id: str
+    policy_name: str
     product_id: str
-    premium_amount: int
-    sum_assured: int
-    start_date: date
-    end_date: date
+    base_premium: int
+    base_sum_assured: int
+    duration_months: int = 12
+    description: Optional[str] = None
 
 
 class PolicyUpdate(SQLModel):
-    """Schema for updating a policy."""
-    premium_amount: Optional[int] = None
-    sum_assured: Optional[int] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    status: Optional[str] = None
+    """Schema for updating a policy template."""
+    policy_name: Optional[str] = None
+    base_premium: Optional[int] = None
+    base_sum_assured: Optional[int] = None
+    duration_months: Optional[int] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class PolicyResponse(SQLModel):
-    """Schema for policy response."""
+    """Schema for policy template response."""
     id: str
     policy_number: str
-    customer_id: str
+    policy_name: str
     product_id: str
-    premium_amount: int
-    sum_assured: int
-    start_date: date
-    end_date: date
-    status: str
-    renewal_reminder_sent: bool
+    base_premium: int
+    base_sum_assured: int
+    duration_months: int
+    is_active: bool
+    description: Optional[str]
     created_at: datetime
 
 
-class PolicyWithDetails(SQLModel):
-    """Schema for policy with product and customer details."""
+class PolicyWithProduct(SQLModel):
+    """Schema for policy with product details."""
     id: str
     policy_number: str
-    customer_id: str
-    premium_amount: int
-    sum_assured: int
-    start_date: date
-    end_date: date
-    status: str
-    # Product info
-    product_code: str
+    policy_name: str
+    product_id: str
     product_name: str
     product_type: str
-    # Customer info
-    customer_name: str
-    customer_phone: str
+    base_premium: int
+    base_sum_assured: int
+    duration_months: int
+    is_active: bool
+    description: Optional[str]
+

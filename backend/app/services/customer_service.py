@@ -13,9 +13,9 @@ from datetime import date, timedelta
 from typing import Optional, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, delete
 
-from ..models import Customer, Policy
+from ..models import Customer, CustomerPolicy, Call
 from ..schemas import CustomerCreate
 
 
@@ -200,6 +200,7 @@ async def update_customer(
 async def delete_customer(session: AsyncSession, customer_id: str) -> bool:
     """
     Delete a customer from the database.
+    Also deletes all associated calls and customer policies (cascade).
     
     Args:
         session: Database session
@@ -211,6 +212,18 @@ async def delete_customer(session: AsyncSession, customer_id: str) -> bool:
     customer = await get_customer(session, customer_id)
     if not customer:
         return False
+    
+    # Delete all calls first (cascade)
+    delete_calls_stmt = delete(Call).where(
+        Call.customer_id == customer_id
+    )
+    await session.execute(delete_calls_stmt)
+    
+    # Delete all customer policies (cascade)
+    delete_policies_stmt = delete(CustomerPolicy).where(
+        CustomerPolicy.customer_id == customer_id
+    )
+    await session.execute(delete_policies_stmt)
     
     await session.delete(customer)
     await session.commit()
@@ -266,13 +279,14 @@ async def get_customers_with_expiring_policies(
     expiry_date = today + timedelta(days=days)
     
     # Get distinct customers who have active policies expiring soon
+    # Uses CustomerPolicy junction table
     stmt = (
         select(Customer)
-        .join(Policy, Policy.customer_id == Customer.id)
+        .join(CustomerPolicy, CustomerPolicy.customer_id == Customer.id)
         .where(
-            Policy.status == "active",
-            Policy.end_date >= today,
-            Policy.end_date <= expiry_date
+            CustomerPolicy.status == "active",
+            CustomerPolicy.end_date >= today,
+            CustomerPolicy.end_date <= expiry_date
         )
         .distinct()
         .order_by(Customer.name)

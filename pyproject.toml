@@ -20,6 +20,8 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.2.1",
     "httpx>=0.26.0",
+    # Task Queue
+    "celery[redis]>=5.3.0",
 ]
 
 [project.optional-dependencies]

@@ -42,7 +42,23 @@ async def get_one(call_id: str, session: AsyncSession = Depends(get_session)):
 
 @router.put("/{call_id}/summary", response_model=CallResponse)
 async def update_summary(call_id: str, data: CallSummary, session: AsyncSession = Depends(get_session)):
-    call = await call_service.update_summary(session, call_id, data.outcome, data.notes, data.interested_product_id)
+    """
+    Update call summary with outcome and renewal/upgrade status.
+    
+    If renewal_agreed=True, the customer's policy will be automatically renewed.
+    If upgrade_agreed=True with upgrade_to_policy_id, a new upgraded policy is created.
+    """
+    call = await call_service.update_summary(
+        session, 
+        call_id, 
+        outcome=data.outcome, 
+        notes=data.notes, 
+        product_id=data.interested_product_id,
+        customer_policy_id=data.customer_policy_id,
+        renewal_agreed=data.renewal_agreed,
+        upgrade_agreed=data.upgrade_agreed,
+        upgrade_to_policy_id=data.upgrade_to_policy_id
+    )
     if not call:
         raise HTTPException(status_code=404, detail="Not found")
     return call

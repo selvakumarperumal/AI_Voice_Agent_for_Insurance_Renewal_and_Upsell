@@ -45,6 +45,10 @@ class Product(SQLModel, table=True):
     # Product description
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     
+    # Age eligibility
+    min_age: Optional[int] = Field(default=18)  # Minimum eligible age
+    max_age: Optional[int] = Field(default=65)  # Maximum eligible age
+    
     # Status
     is_active: bool = Field(default=True)  # Can be deactivated
     

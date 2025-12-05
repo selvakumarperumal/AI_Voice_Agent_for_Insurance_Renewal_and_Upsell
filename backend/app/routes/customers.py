@@ -8,34 +8,107 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_session
-from ..schemas import CustomerCreate, CustomerResponse
-from ..services import customer_service, policy_service
+from ..schemas import (
+    CustomerCreate, CustomerResponse,
+    CustomerPolicyCreate, CustomerPolicyResponse, CustomerPolicyWithDetails
+)
+from ..services import customer_service
+from ..services import customer_policy_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
 
+# =============================================================================
+# CUSTOMER POLICY ENDPOINTS (attach/detach/list policies)
+# =============================================================================
+
 @router.get(
-    "/expiring-policies",
-    response_model=List[CustomerResponse],
-    summary="Get customers with expiring policies"
+    "/{customer_id}/policies",
+    response_model=List[CustomerPolicyWithDetails],
+    summary="Get customer's policies"
 )
-async def get_customers_with_expiring_policies(
+async def get_customer_policies(
+    customer_id: str,
     session: AsyncSession = Depends(get_session),
-    days: int = Query(30, description="Number of days to check for policy expiration", ge=1, le=365)
+    status_filter: Optional[str] = Query(None, alias="status")
+):
+    """Get all policies attached to a customer."""
+    customer = await customer_service.get_customer(session, customer_id)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    
+    return await customer_policy_service.get_customer_policies(session, customer_id, status=status_filter)
+
+
+@router.post(
+    "/{customer_id}/policies",
+    response_model=CustomerPolicyResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Attach policy to customer"
+)
+async def attach_policy(
+    customer_id: str,
+    data: CustomerPolicyCreate,
+    session: AsyncSession = Depends(get_session)
 ):
     """
-    Get all customers whose policies are expiring within the specified number of days.
+    Attach a policy to a customer.
     
-    This is useful for:
-    - Generating call lists for renewal campaigns
-    - Sending reminder notifications
-    - Planning outreach activities
-    
-    Returns unique customers (no duplicates even if they have multiple expiring policies).
+    Example:
+    ```json
+    {
+        "policy_id": "uuid-here",
+        "start_date": "2024-01-01",
+        "end_date": "2025-01-01",
+        "premium_amount": 25000,
+        "sum_assured": 500000
+    }
+    ```
     """
-    return await customer_service.get_customers_with_expiring_policies(session, days=days)
+    try:
+        cp = await customer_policy_service.attach_policy_to_customer(session, customer_id, data)
+        return cp
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+
+@router.delete(
+    "/{customer_id}/policies/{customer_policy_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Detach policy from customer"
+)
+async def detach_policy(
+    customer_id: str,
+    customer_policy_id: str,
+    session: AsyncSession = Depends(get_session)
+):
+    """Detach (cancel) a customer policy subscription by its ID."""
+    success = await customer_policy_service.detach_policy_by_id(session, customer_id, customer_policy_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer policy not found")
+
+
+# =============================================================================
+# EXPIRING POLICIES
+# =============================================================================
+
+@router.get(
+    "/expiring-policies",
+    response_model=List[CustomerPolicyWithDetails],
+    summary="Get policies expiring soon"
+)
+async def get_expiring_policies(
+    session: AsyncSession = Depends(get_session),
+    days: int = Query(30, description="Number of days to check", ge=1, le=365)
+):
+    """Get all customer policies expiring within specified days."""
+    return await customer_policy_service.get_expiring_customer_policies(session, days=days)
+
+
+# =============================================================================
+# CUSTOMER CRUD
+# =============================================================================
 
 @router.post(
     "",
@@ -47,22 +120,7 @@ async def create_customer(
     data: CustomerCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    """
-    Add a new customer to the system.
-    
-    Example:
-    ```json
-    {
-        "customer_code": "CUST001",
-        "name": "John Doe",
-        "email": "john@example.com",
-        "phone": "+919876543210",
-        "age": 35,
-        "city": "Mumbai",
-        "address": "123 Main Street"
-    }
-    ```
-    """
+    """Add a new customer to the system."""
     try:
         customer = await customer_service.create_customer(session, data)
         return customer
